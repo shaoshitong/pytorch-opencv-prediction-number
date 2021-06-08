@@ -3,6 +3,7 @@ import torch
 from torch.autograd import Variable
 from torchvision import transforms
 from torch.utils.data import Dataset, DataLoader
+import torch.nn.functional as F
 import cv2 as cv
 from capture import getdata
 root = "./image"
@@ -27,7 +28,6 @@ class MyDataset(Dataset):
     def __getitem__(self, index):  # 按照索引方式读取
         fn, label = self.imgs[index]  # fn和label分别获得imgs[index]也即是刚才每行中word[0]和word[1]的信息
         img = self.loader(fn)  # 将图片转为RGB格式
-        print(img.shape,type(img))
         if self.transform is not None:
             img = self.transform(img)  # 转换图片格式，由第41行代码的transform可知将图片转为Tensor格式
         return img, label
@@ -48,19 +48,24 @@ class Net(torch.nn.Module):
             torch.nn.ReLU(),
             torch.nn.MaxPool2d(2)
         )
-
+        self.conv3 = torch.nn.Sequential(
+            torch.nn.Conv2d(3, 32, 3, 1, 1),
+            torch.nn.ReLU(),
+            torch.nn.MaxPool2d(4),
+        )
         self.dense = torch.nn.Sequential(
             torch.nn.Linear(1568, 64),
             torch.nn.ReLU(),
             torch.nn.Linear(64, 10),
         )
-
+        self.softmax=torch.nn.Softmax(1)
     def forward(self, x):
-        conv1_out = self.conv1(x.permute(0,2,1,3))
-        conv2_out = self.conv2(conv1_out)
-        print(conv2_out.shape)
+        x=x.permute(0,2,1,3)
+        conv1_out = self.conv1(x)
+        conv2_out = self.conv2(conv1_out)+self.conv3(x)
+        print(conv2_out.shape,torch.mean(conv2_out,dim=0).shape)
+        conv2_out=F.batch_norm(conv2_out,Variable(torch.zeros(conv2_out.shape[1])),Variable(torch.ones(conv2_out.shape[1])))
         res = conv2_out.view(conv2_out.size(0), -1)
-        print(res.shape)
         out = self.dense(res)
         return out
 
@@ -72,6 +77,7 @@ def train():
     model = Net()
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     loss_func = torch.nn.CrossEntropyLoss()
+    lr_scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=[150,300,450,600], gamma=0.8)
     for epoch in range(1000):
         print('epoch {}'.format(epoch + 1))
         for batch_x, batch_y in train_loader:
@@ -82,7 +88,8 @@ def train():
             print(float(loss.item()))
             optimizer.zero_grad()
             loss.backward()
-        optimizer.step()
+            optimizer.step()
+        lr_scheduler.step()
     torch.save(model.state_dict(), 'model.pkl')  # 保存模型
 def test():
     model = Net()
@@ -90,10 +97,10 @@ def test():
     model.eval()
     cap = cv.VideoCapture(0)
     cap.set(cv.CAP_PROP_FRAME_HEIGHT, 64), cap.set(cv.CAP_PROP_FRAME_HEIGHT, 48)
+    cv.resizeWindow("frame", 640, 480)
     while 1:
         ret, frame = cap.read()
-        gray = cv.resize(cv.cvtColor(frame, cv.COLOR_BGR2GRAY),(28,28), interpolation=cv.INTER_LINEAR)
-        print(gray.shape)
+        gray = cv.resize(frame,(28,28), interpolation=cv.INTER_LINEAR)
         img_to_tensor = transforms.Compose([
             transforms.ToTensor(),
         ]
@@ -106,7 +113,7 @@ def test():
         print(test_output)
         pred_y = torch.max(test_output, 1)[1].data.item()+1
         print(pred_y, 'prediction number')
-        cv.imshow("frame", gray)
+        cv.imshow("frame", cv.cvtColor(frame,cv.COLOR_BGR2GRAY))
         if cv.waitKey(0)==ord('q'):
             break
         else:
@@ -115,3 +122,4 @@ def test():
 
 if __name__=="__main__":
     train()
+    test()
