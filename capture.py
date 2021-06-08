@@ -1,17 +1,27 @@
-import cv2
+import os
+import cv2 as cv
+import time
 
-cap = cv2.VideoCapture(0)
-cap.set(cv2.CAP_PROP_FRAME_WIDTH, 64)
-cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 48)
-i = 0
-while 1:
-    ret, frame = cap.read()
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-    if (cv2.waitKey(1) & 0xFF) == ord('s'):  # 不断刷新图像，这里是1ms 返回值为当前键盘按键值
-        cv2.imwrite('./image/%d.jpg' % i, gray)
-        i += 1
-    if (cv2.waitKey(1) & 0xFF) == ord('q'):
-        break
-    cv2.imshow("frame", gray)
-cap.release()
-cv2.destroyAllWindows()
+def getdata():
+    ff = open("test.txt", "w")
+    if not os.path.isdir("./image"):
+        os.mkdir("./image")
+    cap = cv.VideoCapture(0)
+    cap.set(cv.CAP_PROP_FRAME_HEIGHT, 64), cap.set(cv.CAP_PROP_FRAME_HEIGHT, 48)
+    i = 0
+    while cap.isOpened():
+        print("the number is {}".format((i) % 10+1))
+        time.sleep(1)
+        ret, frame = cap.read()
+        print(ret)
+        gray = cv.cvtColor(frame, cv.COLOR_BGR2GRAY)
+        cv.imshow("frame", gray)
+        if cv.waitKey(0)  == ord('c'):
+            cv.imwrite('./image/{}.jpg'.format(i), gray)
+            ff.writelines('./image/{}.jpg,{}\n'.format(i, (i) % 10+1))
+            i = i + 1
+        else:
+            break
+    ff.close()
+    cap.release()
+    cv.destroyAllWindows()
